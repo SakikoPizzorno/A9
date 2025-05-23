@@ -1,62 +1,60 @@
-/*/*******************************************************************************
-* EE 329 A9 I2C EEPROM
+/*******************************************************************************
+* EE 329 A5 SPI Digital to Analog Converter (DAC)
 *******************************************************************************
-* @file : main.c
-* @brief : I2C with EEPROM
-* project : EE 329 S'24 Assignment 4
-* authors : Andrew Daouda -- adaouda@calpoly.edu
-* 			Seth Saxena -- stsaxena@calpoly.edu
-* version : 0.2
-* date : 240523
-* compiler : STM32CubeCLT v.1.15.0
-* target : NUCLEO-L496ZG
-* @attention : (c) 2023 STMicroelectronics. All rights reserved.
-******************************************************************************
-* REVISION HISTORY
-* 0.1 240429 Initial version
-******************************************************************************
-* main.c from Raheel Rehmatullah
-* Accessed: 5/23/2024
-*****************************************************************************/
+* @file           : main.c
+* @brief          :
+* project         : EE 329 S'25 Assignment 7
+* authors         : Sakiko Pizzorno (spizzorn@calpoly.edu)
+*					Alexander Von Fuchs
+* version         : 0.1
+* date            : 5/7/25
+* compiler        : STM32CubeIDE v.1.12.0 Build: 14980_20230301_1550 (UTC)
+* target          : NUCLEO-L4A6ZG (STM32L496ZG)
+* clocks          : 4 MHz MSI to AHB2
+* @attention      : (c) 2023 STMicroelectronics. All rights reserved.
+*******************************************************************************/
+
 #include "main.h"
 #include "i2c.h"
-#define DEVICE_ADDRESS 0x52
-#define DATA_TO_SEND 0x77
-void SystemClock_Config(void);
+
 int main(void)
 {
-	// LED INIT for TIMER (New to A3)
-		// configure GPIO pins PC4 for:
-		// output mode, push-pull, no pull up or pull down, high speed
-		GPIOC->MODER   &= ~(GPIO_MODER_MODE4); // MAKES BITS ZERO (MAKES INPUT MODE, DEFAULT_
-		GPIOC->MODER   |=  (GPIO_MODER_MODE4_0); // specify output mode
-		GPIOC->OTYPER  &= ~(GPIO_OTYPER_OT4); // specify push-pull
-		GPIOC->PUPDR   &= ~(GPIO_PUPDR_PUPD4); // make no pull up or pull down
-		GPIOC->OSPEEDR |=  (3 << GPIO_OSPEEDR_OSPEED4_Pos); // high speed
-		GPIOC->BRR = (GPIO_PIN_4); // preset PC4 to 0
-//// enable blue on-board blue LED
-//	RCC->AHB2ENR   |=  (RCC_AHB2ENR_GPIOBEN);
-//	GPIOB->MODER &= ~(GPIO_MODER_MODER7);
-//	GPIOB->MODER |= GPIO_MODER_MODER7_0;
-//	GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPDR7);
-//	GPIOB->OSPEEDR |= GPIO_OSPEEDR_OSPEED7;
-//	GPIOB->OTYPER &= ~(GPIO_OTYPER_OT7);
-//	GPIOB->BRR = (GPIO_PIN_7);
 	HAL_Init();
 	SystemClock_Config();
 	I2C_init();
+
 	//Write Data to EEPROM
-	I2C_write(DEVICE_ADDRESS, DATA_TO_SEND, 0x05);
+	I2C_write(MEMORY_ADDRESS, DATA_SEND);
+
 	//Delay
 	for(int i = 0; i < 20000; i++);
+
+	// Read Data Previously Written
+	I2C_read(MEMORY_ADDRESS);
+
 	//Check if the data read is the same as received, if so, turn on the LED
-	if(DATA_TO_SEND == (I2C_read( DEVICE_ADDRESS, 0x05))){
+	if(DATA_SEND == (I2C_read(MEMORY_ADDRESS))){
 		GPIOB->BSRR = (GPIO_PIN_7);
 	}
 	while (1){
 	}
 }
 
+//Set up PB7, on-board LED
+void LED_init(){
+	RCC->AHB2ENR |= (RCC_AHB2ENR_GPIOBEN);
+	GPIOB-> MODER &= ~(GPIO_MODER_MODE7);
+	GPIOB -> MODER |= (GPIO_MODER_MODE7_0); //Set PB0 to output mode
+	GPIOB -> OTYPER &= ~(GPIO_OTYPER_OT7); // Set the OTYPER to push-pull
+	GPIOB -> OSPEEDR &= ~(GPIO_OSPEEDR_OSPEED7);
+	GPIOB -> OSPEEDR |= (GPIO_OSPEEDR_OSPEED7_1); //Set to high speed.
+	GPIOB -> PUPDR &= ~(GPIO_PUPDR_PUPD7); //Set to no resistor
+}
+
+/**
+  * @brief System Clock Configuration
+  * @retval None
+  */
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
@@ -75,11 +73,14 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI;
   RCC_OscInitStruct.MSIState = RCC_MSI_ON;
   RCC_OscInitStruct.MSICalibrationValue = 0;
-  RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_6;
+  //RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_6;
+  RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_8; // sets MSI to 16 MHz
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
+    SystemCoreClockUpdate();  // ✅ Place this LAST in the function
+
   }
 
   /** Initializes the CPU, AHB and APB buses clocks
@@ -97,9 +98,6 @@ void SystemClock_Config(void)
   }
 }
 
-/* USER CODE BEGIN 4 */
-
-/* USER CODE END 4 */
 
 /**
   * @brief  This function is executed in case of error occurrence.
@@ -131,4 +129,4 @@ void assert_failed(uint8_t *file, uint32_t line)
      ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   /* USER CODE END 6 */
 }
-#endif /* USE_FULL_ASSERT */
+#endif

@@ -1,158 +1,121 @@
-/*/****************************************************************************
-* EE 329 A9 I2C EEPROM
+/*******************************************************************************
+* EE 329 A5 SPI Digital to Analog Converter (DAC)
 *******************************************************************************
-* @file : i2c.c
-* @brief : I2C with EEPROM
-* project : EE 329 S'24 Assignment 4
-* authors : Andrew Daouda -- adaouda@calpoly.edu
-* 			Seth Saxena -- stsaxena@calpoly.edu
-* version : 0.2
-* date : 240523
-* compiler : STM32CubeCLT v.1.15.0
-* target : NUCLEO-L496ZG
-* @attention : (c) 2023 STMicroelectronics. All rights reserved.
-******************************************************************************
-* REVISION HISTORY
-* 0.1 240429 Initial version
-******************************************************************************
-* i2c.c from Raheel Rehmatullah
-* Accessed: 5/23/2024
-*****************************************************************************/
-#include "i2c.h"
-/*
-* PB8 -> i2c SCL
-* PB9 -> i2c SDA
-*/
-/*
-* I2C_init initialized the i2c GPIO and peripherals.
-* Run it before your while loop
-*/
-void I2C_init(void){
-	/* USER configure GPIO pins for I2C alternate functions SCL and SDA */
+* @file           : main.c
+* @brief          :
+* project         : EE 329 S'25 Assignment 7
+* authors         : Sakiko Pizzorno (spizzorn@calpoly.edu)
+*					Alexander Von Fuchs
+* version         : 0.1
+* date            : 5/7/25
+* compiler        : STM32CubeIDE v.1.12.0 Build: 14980_20230301_1550 (UTC)
+* target          : NUCLEO-L4A6ZG (STM32L496ZG)
+* clocks          : 4 MHz MSI to AHB2
+* @attention      : (c) 2023 STMicroelectronics. All rights reserved.
+*******************************************************************************/
+
+#include "I2C.h"
+
+//todo FUNCTION HEADER
+void I2C_init(void) {
+	//CLOCK setup
+	RCC->AHB2ENR |= (RCC_AHB2ENR_GPIOBEN); //Enable GPIOB Clock
+	RCC->APB1ENR1 |= (RCC_APB1ENR1_I2C1EN); // Enable I2C1 clock
+	//Pin configuration
+	GPIOB->MODER &= ~(GPIO_MODER_MODE8 | GPIO_MODER_MODE9);
+	GPIOB->MODER |= (GPIO_MODER_MODE8_1 | GPIO_MODER_MODE9_1); //Alt Func Mode
+	GPIOB->OTYPER |= (GPIO_OTYPER_OT8 | GPIO_OTYPER_OT9); //open drain
+	GPIOB->OSPEEDR &= ~(GPIO_OSPEEDR_OSPEED8 | GPIO_OSPEEDR_OSPEED9);
+	GPIOB->OSPEEDR |= (GPIO_OSPEEDR_OSPEED8_1 | GPIO_OSPEEDR_OSPEED9_1);
+	GPIOB->PUPDR &= (GPIO_PUPDR_PUPD8 | GPIO_PUPDR_PUPD9); //no pull/pulldown
+
+	// set AF4
+	GPIOB->AFR[1] &= ~((0xF << (0 * 4)) | (0xF << (1 * 4))); // Clear AFR[1] bits for pins 8 & 9
+	GPIOB->AFR[1] |= ((4 << (0 * 4)) | (4 << (1 * 4)));      // Set AF4 for I2C1
+
 	// Configure I2C
-	RCC->AHB2ENR |= (RCC_AHB2ENR_GPIOBEN);   // enable GPIOB clock
-	GPIOB->MODER &= ~(GPIO_MODER_MODE7 |
-				GPIO_MODER_MODE8 |
-				GPIO_MODER_MODE9); //clear bits
-	GPIOB->MODER |= (GPIO_MODER_MODE8_1 |
-				GPIO_MODER_MODE9_1); //set to output mode
-	GPIOB->AFR[1] &= ~((0x000F << GPIO_AFRH_AFSEL8_Pos)
-			| (0x000F << GPIO_AFRH_AFSEL9_Pos));
-	GPIOB->AFR[1] |= ((0x0004 << GPIO_AFRH_AFSEL8_Pos)
-			| (0x0004 << GPIO_AFRH_AFSEL9_Pos));	//Set to AF I2C mode
-	GPIOB->OTYPER &= ~(GPIO_OTYPER_OT7 |
-				GPIO_OTYPER_OT8 | GPIO_OTYPER_OT9 ); //Clear bits
-	GPIOB->OTYPER |= (GPIO_OTYPER_OT8 |
-				GPIO_OTYPER_OT9); //Set to Open Drain output
-	GPIOB->PUPDR &= (GPIO_PUPDR_PUPD8 |
-				GPIO_PUPDR_PUPD9); //Clear bits
 	RCC->APB1ENR1 |= RCC_APB1ENR1_I2C1EN;  // enable I2C bus clock
-	I2C1->CR1   &= ~( I2C_CR1_PE );  /* put I2C into reset
-(release SDA, SCL) */
+	I2C1->CR1   &= ~( I2C_CR1_PE );        // put I2C into reset (release SDA, SCL)
 	I2C1->CR1   &= ~( I2C_CR1_ANFOFF );    // filters: enable analog
 	I2C1->CR1   &= ~( I2C_CR1_DNF );       // filters: disable digital
-	I2C1->TIMINGR = 0x00303D5B;			   // set 14 MHz
-	I2C1->CR2   |=  ( I2C_CR2_AUTOEND );   // auto send STOP after tx
+	I2C1->TIMINGR = 0x00303D5B;            // 16 MHz SYSCLK timing from CubeMX
+	//I2C1->TIMINGR = 0x00000E14; // valid for 4 MHz MSI
+
+	I2C1->CR2   |=  ( I2C_CR2_AUTOEND );   // auto send STOP after transmission
 	I2C1->CR2   &= ~( I2C_CR2_ADD10 );     // 7-bit address mode
 	I2C1->CR1   |=  ( I2C_CR1_PE );        // enable I2C
 }
-/*
-* Write to your device
-* Params include:
-* Device address - the i2c address of the device
-* tx_data - the data youre writing to the device
-* tx_address - the register address that you want to send the data to
-*/
 
-void I2C_write(uint8_t device_address, uint8_t tx_data, uint16_t tx_address) {
-    // Set write mode, clear byte count, enable AUTOEND
-    I2C1->CR2 &= ~I2C_CR2_RD_WRN;  // Set to write mode
-    I2C1->CR2 &= ~(0xFF << I2C_CR2_NBYTES_Pos);  // Clear NBYTES
-    I2C1->CR2 |= (3 << I2C_CR2_NBYTES_Pos);      // 3 bytes: 2 address, 1 data
-    I2C1->CR2 |= I2C_CR2_AUTOEND;                // Automatically send STOP
-
-    // Set 7-bit address (left-shifted)
-    I2C1->CR2 &= ~I2C_CR2_SADD;
-    I2C1->CR2 |= (device_address << 1); // SADD[7:1] = address, SADD[0] = don't care
-
-    // Start I2C write operation
+/* -----------------------------------------------------------------------------
+ * function : I2C_write( )
+ * INs      : byte of data to write and 15-bit address to put
+ * OUTs     : none
+ * action   : TODO
+ * -------------------------------------------------------------------------- */
+void I2C_write(uint16_t mem_address, uint8_t tx_data) {
+    // Set up the write transaction
+    I2C1->CR2 &= ~(I2C_CR2_SADD | I2C_CR2_NBYTES);
+    I2C1->CR2 |= (DEVICE_ADDRESS << 1); // SADD is 7-bit, left-shift by 1
+    I2C1->CR2 |= (3 << I2C_CR2_NBYTES_Pos); // 2 address bytes + 1 data byte
+    I2C1->CR2 &= ~I2C_CR2_RD_WRN; // Write mode
     I2C1->CR2 |= I2C_CR2_START;
 
-    // Transmit MSB of memory address
+    // Send MSB of address
     while (!(I2C1->ISR & I2C_ISR_TXIS));
-    I2C1->TXDR = (tx_address >> 8) & 0xFF;
+    I2C1->TXDR = (MEMORY_ADDRESS >> 8);
 
-    // Transmit LSB of memory address
+    // Send LSB of address
     while (!(I2C1->ISR & I2C_ISR_TXIS));
-    I2C1->TXDR = tx_address & 0xFF;
+    I2C1->TXDR = (MEMORY_ADDRESS & 0xFF);
 
-    // Transmit data
+    // Send data byte
     while (!(I2C1->ISR & I2C_ISR_TXIS));
-    I2C1->TXDR = tx_data;
+    I2C1->TXDR = DATA_SEND;
 
-    // Wait for STOP condition and clear it
+    // Wait for stop condition
     while (!(I2C1->ISR & I2C_ISR_STOPF));
     I2C1->ICR |= I2C_ICR_STOPCF;
 }
 
+/* -----------------------------------------------------------------------------
+ * function : I2C_read( )
+ * INs      : 15-bit address of where to read byte of data
+ * OUTs     : byte of data read at given address
+ * action   : TODO
+ * -------------------------------------------------------------------------- */
+uint8_t I2C_read(uint16_t address) {
+    // WRITE phase to set address pointer
+    I2C1->CR2 &= ~(I2C_CR2_SADD | I2C_CR2_NBYTES | I2C_CR2_RD_WRN);
+    I2C1->CR2 |= (MEMORY_ADDRESS << 1);
+    I2C1->CR2 |= (2 << I2C_CR2_NBYTES_Pos); // 2 address bytes
+    I2C1->CR2 &= ~I2C_CR2_RD_WRN; // Write mode
+    I2C1->CR2 |= I2C_CR2_START;
 
-//void I2C_write(uint8_t device_address, uint8_t tx_data, uint16_t tx_address){
-//	// build EEPROM transaction
-//	I2C1->CR2   &= ~( I2C_CR2_RD_WRN );    // set WRITE mode
-//	I2C1->CR2   &= ~( I2C_CR2_NBYTES );    // clear Byte count
-//	I2C1->CR2   |=  ( 3 << I2C_CR2_NBYTES_Pos); //8 write 3 bytes (2 Addr,1 data)
-//	I2C1->CR2   &= ~( I2C_CR2_SADD );      // clear device address
-//	I2C1->CR2   |=  ( device_address << (I2C_CR2_SADD_Pos) ); /* device addr SHL 1 */
-//	I2C1->CR2   |=    I2C_CR2_START;       // start I2C WRITE op
-//	//^ Sends Device address
-//	//Send address
-//	while (!(I2C1->ISR & I2C_ISR_TXIS));
-//	I2C1->TXDR = (tx_address >> 8) & 0xFF; // Address high byte
-//	while (!(I2C1->ISR & I2C_ISR_TXIS));
-//	I2C1->TXDR = tx_address & 0x00FF; // Address low byte
-//	// Send the data to write
-//	while (!(I2C1->ISR & I2C_ISR_TXIS));
-//	I2C1->TXDR = tx_data;
-//	// Wait for the STOP condition
-//	while (!(I2C1->ISR & I2C_ISR_STOPF));
-//	// Reset and re-enable I2C bus
-//	//I2C1->CR1 &= ~( I2C_CR1_PE);
-//	//I2C1->CR1 |= ( I2C_CR1_PE);
-//}
-/*
-* Read from your device
-* Params include:
-* device_address - the i2c address of the device
-* rx_address - the register address that you want to receive the data from
-*/
-uint8_t I2C_read(uint8_t device_address, uint16_t rx_address){
-	// build EEPROM Write transaction
-	I2C1->CR2   &= ~( I2C_CR2_RD_WRN );    // set WRITE mode
-	I2C1->CR2   &= ~( I2C_CR2_NBYTES );    // clear Byte count
-	I2C1->CR2   |=  ( 2 << I2C_CR2_NBYTES_Pos); // write 2 bytes (2 addr)
-	I2C1->CR2   &= ~( I2C_CR2_SADD );      // clear device address
-	I2C1->CR2   |=  ( device_address << (I2C_CR2_SADD_Pos) ); /* device addr
-SHL 1 */
-	I2C1->CR2   |=    I2C_CR2_START;       // start I2C WRITE op
-	//^ Sends Device address
-	//Send Address
-	while (!(I2C1->ISR & I2C_ISR_TXIS));
-	I2C1->TXDR = (rx_address >> 8) & 0xFF; // Address high byte
-	while (!(I2C1->ISR & I2C_ISR_TXIS));
-	I2C1->TXDR = rx_address & 0x00FF; // Address low byte
-	while (!(I2C1->ISR & I2C_ISR_STOPF));
-	//delay
-	//for(int i = 0; i < 10000; i++);
-	// build EEPROM Read transaction
-	I2C1->CR2   |=  ( I2C_CR2_RD_WRN );    // set READ mode
-	I2C1->CR2   &= ~( I2C_CR2_NBYTES );    // clear Byte count
-	I2C1->CR2   |=  ( 1 << I2C_CR2_NBYTES_Pos); // Read 1 byte (1 data)
-	I2C1->CR2   &= ~( I2C_CR2_SADD );      // clear device address
-	I2C1->CR2   |=  ( device_address << (I2C_CR2_SADD_Pos) );/* device addr
- 											SHL 1 */
-	I2C1->CR2   |=    I2C_CR2_START;       // start I2C WRITE op
-	//^ Sends Device address
-	//Recieve Data
-	while (!(I2C1->ISR & I2C_ISR_RXNE));
-	return (I2C1->RXDR); //Return data captured
+    // Send MSB of address
+    while (!(I2C1->ISR & I2C_ISR_TXIS));
+    I2C1->TXDR = (address >> 8);
+
+    // Send LSB of address
+    while (!(I2C1->ISR & I2C_ISR_TXIS));
+    I2C1->TXDR = (address & 0xFF);
+
+    // Wait for transfer complete
+    while (!(I2C1->ISR & I2C_ISR_TC));
+
+    // READ phase
+    I2C1->CR2 &= ~(I2C_CR2_SADD | I2C_CR2_NBYTES);
+    I2C1->CR2 |= (MEMORY_ADDRESS << 1);
+    I2C1->CR2 |= (1 << I2C_CR2_NBYTES_Pos); // 1 byte to read
+    I2C1->CR2 |= I2C_CR2_RD_WRN; // Read mode
+    I2C1->CR2 |= I2C_CR2_START;
+
+    // Wait for RX data
+    while (!(I2C1->ISR & I2C_ISR_RXNE));
+    uint8_t data = I2C1->RXDR;
+
+    // Wait for stop condition
+    while (!(I2C1->ISR & I2C_ISR_STOPF));
+    I2C1->ICR |= I2C_ICR_STOPCF;
+
+    return data;
 }

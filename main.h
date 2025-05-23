@@ -1,23 +1,19 @@
-/* USER CODE BEGIN Header */
-/**
- ******************************************************************************
- * @file           : main.h
- * @brief          : Header for main.c file.
- *                   This file contains the common defines of the application.
- ******************************************************************************
- * @attention
- *
- * Copyright (c) 2024 STMicroelectronics.
- * All rights reserved.
- *
- * This software is licensed under terms that can be found in the LICENSE file
- * in the root directory of this software component.
- * If no LICENSE file comes with this software, it is provided AS-IS.
- *
- ******************************************************************************
- */
-/* USER CODE END Header */
-/* Define to prevent recursive inclusion -------------------------------------*/
+/*******************************************************************************
+* EE 329 A5 SPI Digital to Analog Converter (DAC)
+*******************************************************************************
+* @file           : main.c
+* @brief          :
+* project         : EE 329 S'25 Assignment 7
+* authors         : Sakiko Pizzorno (spizzorn@calpoly.edu)
+*					Alexander Von Fuchs
+* version         : 0.1
+* date            : 5/7/25
+* compiler        : STM32CubeIDE v.1.12.0 Build: 14980_20230301_1550 (UTC)
+* target          : NUCLEO-L4A6ZG (STM32L496ZG)
+* clocks          : 4 MHz MSI to AHB2
+* @attention      : (c) 2023 STMicroelectronics. All rights reserved.
+*******************************************************************************/
+
 #ifndef __MAIN_H
 #define __MAIN_H
 #ifdef __cplusplus
